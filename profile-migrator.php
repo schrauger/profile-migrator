@@ -49,7 +49,7 @@ class profile_migrator {
 			array(
 				'post_type' => ['person','profiles'],
 				'posts_per_page' => 1000,
-				'offset' => 2000,
+				'offset' => 0000, // need to cycle between 0, 1000, 2000, and 3000.
 				//'s' => 'Deborah German'
 			)
 		);
@@ -113,7 +113,6 @@ class profile_migrator {
 			} else {
 				// do nothing. don't overwrite if new field already has data (already migrated?),
 				// and don't bother setting an empty new field if there's no data in the old field.
-//echo 'HI.';
 			}
 		}
 	}
@@ -223,4 +222,4 @@ class profile_migrator {
 
 // run profile migration upon plugin activation
 register_activation_hook(__FILE__, ['profile_migrator','run_network_migration']);
-add_action('init',['profile_migrator','run_network_migration']);
+//add_action('init',['profile_migrator','run_network_migration']);
