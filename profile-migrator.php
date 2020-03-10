@@ -3,6 +3,8 @@
 Plugin Name: Profile Migrator
 Plugin URI: https://github.com/schrauger/profile-migrator
 Description: One-shot plugin. Converts profiles from old UCF COM theme to the new Colleges-Theme style.
+If you run into timeout issues, increase the php-fpm and nginx timeouts. Also, you can limit the posts per page,
+then modify the offset and simply deactivate and reactivate the plugin to run the code for each set.
 Version: 1.2.1
 Author: Stephen Schrauger
 Author URI: https://github.com/schrauger/profile-migrator
@@ -245,5 +247,5 @@ class profile_migrator {
 }
 
 // run profile migration upon plugin activation
-register_activation_hook(__FILE__, ['profile_migrator','run_network_migration']);
-//add_action('init',['profile_migrator','run_network_migration']);
+register_activation_hook(__FILE__, ['profile_migrator','run_network_migration']); // run once, when plugin is activated.
+//add_action('init',['profile_migrator','run_network_migration']); // this runs the entire script on every page load. testing only.
