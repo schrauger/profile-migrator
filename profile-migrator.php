@@ -3,7 +3,7 @@
 Plugin Name: Profile Migrator
 Plugin URI: https://github.com/schrauger/profile-migrator
 Description: One-shot plugin. Converts profiles from old UCF COM theme to the new Colleges-Theme style.
-Version: 1.1
+Version: 1.2
 Author: Stephen Schrauger
 Author URI: https://github.com/schrauger/profile-migrator
 License: GPL2
@@ -50,7 +50,7 @@ class profile_migrator {
 				'post_type' => ['person','profiles'],
 				'posts_per_page' => 1000,
 				'offset' => 0000, // need to cycle between 0, 1000, 2000, and 3000.
-				//'s' => 'Deborah German'
+				's' => 'Deborah German'
 			)
 		);
 //		echo 'p: ' . $loop->post_count . '; ';
@@ -125,7 +125,7 @@ class profile_migrator {
 	 */
 	static function alter_acf_sub_reference(string $old_field, string $new_field_parent, string $new_field, int $index){
 		if (class_exists('acf')) { // simple check to make sure acf is installed and running at this point
-
+			global $post;
 
 			$repeater_values = get_field($new_field_parent);
 			$first_row = $repeater_values[$index - 1]; // acf indexes are 1 based, but php arrays are 0 based.
@@ -135,7 +135,18 @@ class profile_migrator {
 				$old_value = get_field( $old_field );
 				if ($old_value) {
 					// if new field is empty, and old field has something, then copy old value to the new field
+					$current_rows = count(get_field($new_field_parent));
+					if ($index > $current_rows) {
+						// apparently, it doesn't auto insert a new row. do it manually.
+						$sanity = 0;
+						while (($index > count(get_field($new_field_parent))) && ($index < 10) && $sanity < 10){
+							// sanity check of 10; increase if you know there can be more than 10 rows of some data
+							add_row($new_field_parent, [$new_field => null]); //insert empty data, which will be overwritten later
+							$sanity++;
+						}
+					}
 					update_sub_field( [ $new_field_parent, $index, $new_field ], $old_value );
+					//echo 'new data: ' . get_sub_field([$new_field_parent, $index, $new_field]);
 				}
 			} else {
 				// do nothing. don't overwrite if new field already has data (already migrated?),
@@ -167,7 +178,7 @@ class profile_migrator {
 
 			foreach ($old_fields as $field) {
 				if (is_array($field)){
-					if ($field['acf']){
+					if ($field['acf'] && get_field($field['acf'])){
 						if ($field['pre']){
 							$concat_value .= $field['pre'];
 						}
@@ -222,4 +233,4 @@ class profile_migrator {
 
 // run profile migration upon plugin activation
 register_activation_hook(__FILE__, ['profile_migrator','run_network_migration']);
-//add_action('init',['profile_migrator','run_network_migration']);
+add_action('init',['profile_migrator','run_network_migration']);
