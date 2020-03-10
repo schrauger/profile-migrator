@@ -3,7 +3,7 @@
 Plugin Name: Profile Migrator
 Plugin URI: https://github.com/schrauger/profile-migrator
 Description: One-shot plugin. Converts profiles from old UCF COM theme to the new Colleges-Theme style.
-Version: 1.2
+Version: 1.2.1
 Author: Stephen Schrauger
 Author URI: https://github.com/schrauger/profile-migrator
 License: GPL2
@@ -25,6 +25,7 @@ class profile_migrator {
 	// Loops through all profile types
 	static function convert(){
 		self::alter_post_type();
+		self::alter_post_taxonomy();
 		self::alter_acf_references();
 	}
 
@@ -33,14 +34,26 @@ class profile_migrator {
 	 */
 	static function alter_post_type(){
 		global $wpdb;
-		$old_post_types = array('profiles' => 'person');
-		foreach ($old_post_types as $old_type=>$new_type) {
+		$old_post_types = array('profiles' => 'person',);
+		foreach ($old_post_types as $old_type => $new_type) {
 			$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->posts} SET post_type = REPLACE(post_type, %s, %s) 
                          WHERE post_type LIKE %s", $old_type, $new_type, $old_type ) );
 			$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->posts} SET guid = REPLACE(guid, %s, %s) 
                          WHERE guid LIKE %s", "post_type={$old_type}", "post_type={$new_type}", "%post_type={$old_type}%" ) );
 			$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->posts} SET guid = REPLACE(guid, %s, %s) 
                          WHERE guid LIKE %s", "/{$old_type}/", "/{$new_type}/", "%/{$old_type}/%" ) );
+		}
+	}
+
+	/**
+	 * Alters the database to change custom taxonomy from 'profiles_category' to plain old 'category'
+	 */
+	static function alter_post_taxonomy(){
+		global $wpdb;
+		$old_taxonomy = array('profiles_category' => 'category',);
+		foreach ($old_taxonomy as $old_taxonomy => $new_taxonomy){
+			$wpdb->query( $wpdb->prepare("UPDATE {$wpdb->term_taxonomy} SET taxonomy = REPLACE(taxonomy, %s, %s)
+						 WHERE taxonomy LIKE %s", "{$old_taxonomy}", "{$new_taxonomy}", "%{$old_taxonomy}%"));
 		}
 	}
 
