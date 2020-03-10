@@ -50,7 +50,7 @@ class profile_migrator {
 				'post_type' => ['person','profiles'],
 				'posts_per_page' => 1000,
 				'offset' => 0000, // need to cycle between 0, 1000, 2000, and 3000.
-				's' => 'Deborah German'
+				//'s' => 'Deborah German'
 			)
 		);
 //		echo 'p: ' . $loop->post_count . '; ';
