@@ -233,4 +233,4 @@ class profile_migrator {
 
 // run profile migration upon plugin activation
 register_activation_hook(__FILE__, ['profile_migrator','run_network_migration']);
-add_action('init',['profile_migrator','run_network_migration']);
+//add_action('init',['profile_migrator','run_network_migration']);
