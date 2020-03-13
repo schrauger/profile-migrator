@@ -5,7 +5,7 @@ Plugin URI: https://github.com/schrauger/profile-migrator
 Description: One-shot plugin. Converts profiles from old UCF COM theme to the new Colleges-Theme style.
 If you run into timeout issues, increase the php-fpm and nginx timeouts. Also, you can limit the posts per page,
 then modify the offset and simply deactivate and reactivate the plugin to run the code for each set.
-Version: 1.2.1
+Version: 1.2.2
 Author: Stephen Schrauger
 Author URI: https://github.com/schrauger/profile-migrator
 License: GPL2
@@ -73,7 +73,7 @@ class profile_migrator {
 			$loop->the_post();
 			self::alter_acf_reference('position','person_jobtitle');
 			self::alter_acf_sub_reference('phone','person_phone_numbers','number', 1);
-			self::alter_acf_sub_reference('fax','person_phone_numbers','number', 2);
+			//self::alter_acf_sub_reference('fax','person_phone_numbers','number', 2); // we don't care about fax numbers anymore. don't bring them over.
 			self::alter_acf_reference('email','person_email');
 			self::alter_acf_reference('office_address','person_room');
 			self::alter_acf_reference('education','person_educationspecialties');
