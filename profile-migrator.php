@@ -20,15 +20,14 @@ class profile_migrator {
 				self::convert();
 			restore_current_blog();
 		}
-		//self::convert();
 
 	}
 
 	// Loops through all profile types
 	static function convert(){
-//		self::alter_post_type();
-//		self::alter_post_taxonomy();
-//		self::alter_acf_references();
+		self::alter_post_type();
+		self::alter_post_taxonomy();
+		self::alter_acf_references();
 		self::alter_shortcode_references();
 	}
 
