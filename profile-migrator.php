@@ -5,7 +5,7 @@ Plugin URI: https://github.com/schrauger/profile-migrator
 Description: One-shot plugin. Converts profiles from old UCF COM theme to the new Colleges-Theme style.
 If you run into timeout issues, increase the php-fpm and nginx timeouts. Also, you can limit the posts per page,
 then modify the offset and simply deactivate and reactivate the plugin to run the code for each set.
-Version: 1.2.2
+Version: 1.3.0
 Author: Stephen Schrauger
 Author URI: https://github.com/schrauger/profile-migrator
 License: GPL2
@@ -26,9 +26,10 @@ class profile_migrator {
 
 	// Loops through all profile types
 	static function convert(){
-		self::alter_post_type();
-		self::alter_post_taxonomy();
-		self::alter_acf_references();
+//		self::alter_post_type();
+//		self::alter_post_taxonomy();
+//		self::alter_acf_references();
+		self::alter_shortcode_references();
 	}
 
 	/**
@@ -52,10 +53,10 @@ class profile_migrator {
 	 */
 	static function alter_post_taxonomy(){
 		global $wpdb;
-		$old_taxonomy = array('profiles_category' => 'category',);
+		$old_taxonomy = array('profiles_category' => 'people_group',);
 		foreach ($old_taxonomy as $old_taxonomy => $new_taxonomy){
 			$wpdb->query( $wpdb->prepare("UPDATE {$wpdb->term_taxonomy} SET taxonomy = REPLACE(taxonomy, %s, %s)
-						 WHERE taxonomy LIKE %s", "{$old_taxonomy}", "{$new_taxonomy}", "%{$old_taxonomy}%"));
+						 WHERE taxonomy LIKE %s and post_type LIKE %s", "{$old_taxonomy}", "{$new_taxonomy}", "%{$old_taxonomy}%", "%person%"));
 		}
 	}
 
@@ -242,6 +243,20 @@ class profile_migrator {
 			if ($old_value) {
 				set_post_thumbnail( $post, $old_value );
 			}
+		}
+	}
+
+	/**
+	 * Find-replace on all posts and all post types, replacing old shortcode references with new ones
+	 */
+	static function alter_shortcode_references(){
+		global $wpdb;
+		$shortcode_old_new = array('accordion' => 'ucf_college_accordion',);
+		foreach ($shortcode_old_new as $old_type => $new_type) {
+			$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->posts} SET post_content = REPLACE(post_content, %s, %s) 
+                         WHERE post_content LIKE %s", "[{$old_type}]", "[{$new_type}]", "%[{$old_type}]%") ); // shortcodes end either with a ] or a space (with arguments)
+			$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->posts} SET post_content = REPLACE(post_content, %s, %s) 
+                         WHERE post_content LIKE %s", "[{$old_type} ", "[{$new_type} ", "%[{$old_type} %") ); // shortcodes end either with a ] or a space (with arguments)
 		}
 	}
 }
