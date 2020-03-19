@@ -250,7 +250,7 @@ class profile_migrator {
 	 */
 	static function alter_shortcode_references(){
 		global $wpdb;
-		$shortcode_old_new = array('accordion' => 'ucf_college_accordion',);
+		$shortcode_old_new = array('accordion' => 'ucf_college_accordion_deprecated',);
 		foreach ($shortcode_old_new as $old_type => $new_type) {
 			$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->posts} SET post_content = REPLACE(post_content, %s, %s) 
                          WHERE post_content LIKE %s", "[{$old_type}]", "[{$new_type}]", "%[{$old_type}]%") ); // shortcodes end either with a ] or a space (with arguments)
