@@ -5,7 +5,7 @@ Plugin URI: https://github.com/schrauger/profile-migrator
 Description: One-shot plugin. Converts profiles from old UCF COM theme to the new Colleges-Theme style.
 If you run into timeout issues, increase the php-fpm and nginx timeouts. Also, you can limit the posts per page,
 then modify the offset and simply deactivate and reactivate the plugin to run the code for each set.
-Version: 1.3.0
+Version: 1.3.1
 Author: Stephen Schrauger
 Author URI: https://github.com/schrauger/profile-migrator
 License: GPL2
@@ -55,7 +55,8 @@ class profile_migrator {
 		$old_taxonomy = array('profiles_category' => 'people_group',);
 		foreach ($old_taxonomy as $old_taxonomy => $new_taxonomy){
 			$wpdb->query( $wpdb->prepare("UPDATE {$wpdb->term_taxonomy} SET taxonomy = REPLACE(taxonomy, %s, %s)
-						 WHERE taxonomy LIKE %s and post_type LIKE %s", "{$old_taxonomy}", "{$new_taxonomy}", "%{$old_taxonomy}%", "%person%"));
+						 WHERE taxonomy LIKE %s", "{$old_taxonomy}", "{$new_taxonomy}", "%{$old_taxonomy}%"));
+			echo $wpdb->last_query;
 		}
 	}
 
