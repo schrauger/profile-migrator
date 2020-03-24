@@ -5,14 +5,22 @@ Plugin URI: https://github.com/schrauger/profile-migrator
 Description: One-shot plugin. Converts profiles from old UCF COM theme to the new Colleges-Theme style.
 If you run into timeout issues, increase the php-fpm and nginx timeouts. Also, you can limit the posts per page,
 then modify the offset and simply deactivate and reactivate the plugin to run the code for each set.
-Version: 1.3.1
+Version: 1.4.0
 Author: Stephen Schrauger
 Author URI: https://github.com/schrauger/profile-migrator
 License: GPL2
 */
 
 class profile_migrator {
+	const offset_multiplier = 4; /* increase this by 1 each time you activate the plugin.
+								    if the number to convert is set at 100, this will offset by 100, 200, 300, etc. keep in
+                                    keep increasing this until
+                                 */
+	const profiles_to_convert_at_once = 500; // if you get timeouts, reduce this number to ease the load.
+
 	static function run_network_migration(){
+		set_transient( 'admin-notice-profile-migrator', true, 600 );
+
 		$all_sites = get_sites();
 
 		foreach ($all_sites as $site){
@@ -20,15 +28,39 @@ class profile_migrator {
 				self::convert();
 			restore_current_blog();
 		}
+	}
 
+	/**
+	 * Shows a message once, when the plugin is activated.
+	 */
+	static function admin_notice_profile_migrator(){
+		/* Check transient, if available display notice */
+		if( get_transient( 'admin-notice-profile-migrator' ) ){
+			$start = self::profiles_to_convert_at_once * self::offset_multiplier;
+			$end = $start + self::profiles_to_convert_at_once - 1;
+			?>
+			<div class="updated notice is-dismissible">
+				<p>Conversion complete for profiles <strong><?=$start?> - <?=$end?></strong>.</p>
+				<p>Please edit the plugin code and increase the <code>offset_multiplier</code> by one, until all profiles have been converted.</p>
+				<p>Note: if you are getting nginx timeouts, reduce the <code>profiles_to_convert_at_once</code> setting.</p>
+			</div>
+			<?php
+			/* Delete transient, only display this notice once. */
+			delete_transient( 'admin-notice-profile-migrator' );
+		}
 	}
 
 	// Loops through all profile types
 	static function convert(){
-		self::alter_post_type();
-		self::alter_post_taxonomy();
+
+		// only need to run the sql queries once. assume that multiplier>0 means we're running the script again for the next wave of profiles
+		if (self::offset_multiplier == 0) {
+			self::alter_post_type();
+			self::alter_post_taxonomy();
+			self::alter_shortcode_references();
+		}
 		self::alter_acf_references();
-		self::alter_shortcode_references();
+
 	}
 
 	/**
@@ -56,7 +88,21 @@ class profile_migrator {
 		foreach ($old_taxonomy as $old_taxonomy => $new_taxonomy){
 			$wpdb->query( $wpdb->prepare("UPDATE {$wpdb->term_taxonomy} SET taxonomy = REPLACE(taxonomy, %s, %s)
 						 WHERE taxonomy LIKE %s", "{$old_taxonomy}", "{$new_taxonomy}", "%{$old_taxonomy}%"));
-			echo $wpdb->last_query;
+			//echo $wpdb->last_query;
+		}
+	}
+
+	/**
+	 * Find-replace on all posts and all post types, replacing old shortcode references with new ones
+	 */
+	static function alter_shortcode_references(){
+		global $wpdb;
+		$shortcode_old_new = array('accordion' => 'ucf_college_accordion_deprecated',);
+		foreach ($shortcode_old_new as $old_type => $new_type) {
+			$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->posts} SET post_content = REPLACE(post_content, %s, %s) 
+                         WHERE post_content LIKE %s", "[{$old_type}]", "[{$new_type}]", "%[{$old_type}]%") ); // shortcodes end either with a ] or a space (with arguments)
+			$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->posts} SET post_content = REPLACE(post_content, %s, %s) 
+                         WHERE post_content LIKE %s", "[{$old_type} ", "[{$new_type} ", "%[{$old_type} %") ); // shortcodes end either with a ] or a space (with arguments)
 		}
 	}
 
@@ -64,8 +110,8 @@ class profile_migrator {
 		$loop = new WP_Query(
 			array(
 				'post_type' => ['person','profiles'],
-				'posts_per_page' => 1000,
-				'offset' => 0000, // need to cycle between 0, 1000, 2000, and 3000.
+				'posts_per_page' => self::profiles_to_convert_at_once,
+				'offset' => self::profiles_to_convert_at_once * self::offset_multiplier, // need to cycle between 0, 1000, 2000, and 3000.
 				//'s' => 'Deborah German'
 			)
 		);
@@ -246,21 +292,11 @@ class profile_migrator {
 		}
 	}
 
-	/**
-	 * Find-replace on all posts and all post types, replacing old shortcode references with new ones
-	 */
-	static function alter_shortcode_references(){
-		global $wpdb;
-		$shortcode_old_new = array('accordion' => 'ucf_college_accordion_deprecated',);
-		foreach ($shortcode_old_new as $old_type => $new_type) {
-			$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->posts} SET post_content = REPLACE(post_content, %s, %s) 
-                         WHERE post_content LIKE %s", "[{$old_type}]", "[{$new_type}]", "%[{$old_type}]%") ); // shortcodes end either with a ] or a space (with arguments)
-			$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->posts} SET post_content = REPLACE(post_content, %s, %s) 
-                         WHERE post_content LIKE %s", "[{$old_type} ", "[{$new_type} ", "%[{$old_type} %") ); // shortcodes end either with a ] or a space (with arguments)
-		}
-	}
+
 }
 
 // run profile migration upon plugin activation
 register_activation_hook(__FILE__, ['profile_migrator','run_network_migration']); // run once, when plugin is activated.
+add_action( 'admin_notices', ['profile_migrator','admin_notice_profile_migrator'] );
+add_action( 'network_admin_notices', ['profile_migrator','admin_notice_profile_migrator'] );
 //add_action('init',['profile_migrator','run_network_migration']); // this runs the entire script on every page load. testing only.
