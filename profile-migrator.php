@@ -12,7 +12,7 @@ License: GPL2
 */
 
 class profile_migrator {
-	const offset_multiplier = 4; /* increase this by 1 each time you activate the plugin.
+	const offset_multiplier = 0; /* increase this by 1 each time you activate the plugin.
 								    if the number to convert is set at 100, this will offset by 100, 200, 300, etc. keep in
                                     keep increasing this until
                                  */
