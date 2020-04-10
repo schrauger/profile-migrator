@@ -5,14 +5,14 @@ Plugin URI: https://github.com/schrauger/profile-migrator
 Description: One-shot plugin. Converts profiles from old UCF COM theme to the new Colleges-Theme style.
 If you run into timeout issues, increase the php-fpm and nginx timeouts. Also, you can limit the posts per page,
 then modify the offset and simply deactivate and reactivate the plugin to run the code for each set.
-Version: 1.4.0
+Version: 1.4.1
 Author: Stephen Schrauger
 Author URI: https://github.com/schrauger/profile-migrator
 License: GPL2
 */
 
 class profile_migrator {
-	const offset_multiplier = 0; /* increase this by 1 each time you activate the plugin.
+	const offset_multiplier = 1; /* increase this by 1 each time you activate the plugin.
 								    if the number to convert is set at 100, this will offset by 100, 200, 300, etc. keep in
                                     keep increasing this until
                                  */
@@ -36,7 +36,7 @@ class profile_migrator {
 	static function admin_notice_profile_migrator(){
 		/* Check transient, if available display notice */
 		if( get_transient( 'admin-notice-profile-migrator' ) ){
-			$start = self::profiles_to_convert_at_once * self::offset_multiplier;
+			$start = self::profiles_to_convert_at_once * self::offset_multiplier + 1; // people count starting with 1, not 0
 			$end = $start + self::profiles_to_convert_at_once - 1;
 			?>
 			<div class="updated notice is-dismissible">
@@ -54,11 +54,11 @@ class profile_migrator {
 	static function convert(){
 
 		// only need to run the sql queries once. assume that multiplier>0 means we're running the script again for the next wave of profiles
-		if (self::offset_multiplier == 0) {
+		/*if (self::offset_multiplier == 0) {
 			self::alter_post_type();
 			self::alter_post_taxonomy();
 			self::alter_shortcode_references();
-		}
+		}*/
 		self::alter_acf_references();
 
 	}
@@ -128,29 +128,44 @@ class profile_migrator {
 				[
 					[
 						'acf' => 'last_name',
-						'post' => ', '
+						'post' => ','
 					],
 					[
 						'acf' => 'first_name',
-						'post' => ' '
-					],
-					'middle_initial'
+						'pre' => ' '
+					]
 				 ], 'person_orderby_name'
 			);
 			self::concatonate_old_acf_to_new_field(
 				[
 					[
 						'acf' => 'avf_last_name_1',
-						'post' => ', '
+						'post' => ','
 					],
 					[
 						'acf' => 'avf_first_name_1',
-						'post' => ' '
+					    'pre' => ' ',
 					],
-					'avf_middle_initial_1'
-				 ], 'person_orderby_name'
+					[
+						'acf' => 'avf_middle_initial_1',
+						'pre' => ' '
+					]
+				], 'person_orderby_name'
+			);
+			self::concatonate_old_acf_to_new_field(
+				[
+					[
+						'acf' => 'res_last_name',
+						'post' => ','
+					],
+					[
+						'acf' => 'res_first_name',
+						'pre' => ' '
+					]
+				], 'person_orderby_name'
 			);
 			self::biography_to_main();
+			self::resident_fields_to_main();
 			self::image_to_featured();
 		}
 	}
@@ -279,6 +294,30 @@ class profile_migrator {
 			// and don't bother setting an empty new field if there's no data in the old field.
 		}
 	}
+
+	// converts resident fields to be the main post content
+	static function resident_fields_to_main(){
+		global $post;
+		$school = get_field( 'res_medical_school' );
+        $interests = get_field('res_career_interest');
+        $fun_fact = get_field('res_fun_fact');
+
+		if (empty($post->post_content)){
+			wp_update_post([
+				               'ID' => $post->ID,
+				               'post_content' => trim("
+				               <div class='school'>{$school}</div>
+				               <div class='interests'>{$interests}</div>
+				               <div class='fun_fact'>{$fun_fact}</div>
+				               ")
+			               ]);
+
+		} else {
+			// do nothing. don't overwrite if new field already has data (already migrated?),
+			// and don't bother setting an empty new field if there's no data in the old field.
+		}
+	}
+
 
 	// converts the image in the acf field to the featured image
 	static function image_to_featured(){
