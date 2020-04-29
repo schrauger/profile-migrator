@@ -5,7 +5,7 @@ Plugin URI: https://github.com/schrauger/profile-migrator
 Description: One-shot plugin. Converts profiles from old UCF COM theme to the new Colleges-Theme style.
 If you run into timeout issues, increase the php-fpm and nginx timeouts. Also, you can limit the posts per page,
 then modify the offset and simply deactivate and reactivate the plugin to run the code for each set.
-Version: 2.0.0
+Version: 2.0.1
 Author: Stephen Schrauger
 Author URI: https://github.com/schrauger/profile-migrator
 License: GPL2
@@ -16,7 +16,7 @@ class profile_migrator {
 								    if the number to convert is set at 100, this will offset by 100, 200, 300, etc.
                                     keep increasing this until all profiles are converted.
                                  */
-	const profiles_to_convert_at_once = 20; // if you get timeouts, reduce this number to ease the load.
+	const profiles_to_convert_at_once = 5; // if you get timeouts, reduce this number to ease the load.
 
     static function add_actions(){
 	    register_activation_hook(__FILE__, ['profile_migrator','admin_notice_setup']); // run once, when plugin is activated.
@@ -415,10 +415,10 @@ class profile_migrator {
                 }
 
                 function convert_sites(response){
-                    console.log(response);
-
-
-                    $.each(response, function(index, site_id){
+                    $.each(response, function(index, site_details){
+                        console.log(site_details);
+                        let site_id = site_details['site_id'];
+                        let profile_count = site_details['profile_count'];
 
                         $('div.conversion-table tbody').append(`
                         <tr class='site-${site_id}'>
@@ -428,14 +428,22 @@ class profile_migrator {
                             <td class='fully-converted'><span class='percent'></span></td>
                         </tr>
                         `);
-                        site_count_profiles(site_id);
+                        $(`tr.site-${site_id} td.conversion-count span.total`).html(profile_count);
+                        //site_count_profiles(site_id);
                         site_quick_convert(site_id);
-                        site_ranged_convert({
-                            site_id: site_id,
-                            range_start: 0,
-                            completed_range: 0,
-                            first_call: true
-                        });
+
+                        if (profile_count > 0) {
+                            site_ranged_convert({
+                                site_id: site_id,
+                                range_start: 0,
+                                completed_range: 0,
+                                first_call: true
+                            });
+                        } else {
+                            // no profiles. mark as complete instantly.
+                            $(`tr.site-${site_id} td.conversion-count`).html('0/0');
+                            $(`tr.site-${site_id} td.fully-converted`).html('Complete!');
+                        }
 
                     })
                 }
@@ -502,18 +510,18 @@ class profile_migrator {
                     let current_indicator = $(`button.convert span.progress-indicator`).html();
                     let next_indicator;
                     switch (current_indicator) {
-                        case "|":
-                            next_indicator = "/";
+                        case "◐":
+                            next_indicator = "◓";
                             break;
-                        case "/":
-                            next_indicator = "-";
+                        case "◓":
+                            next_indicator = "◑";
                             break;
-                        case "-":
-                            next_indicator = "\\";
+                        case "◑":
+                            next_indicator = "◒";
                             break;
-                        case "\\":
+                        case "◒":
                         default:
-                            next_indicator = "|";
+                            next_indicator = "◐";
                     }
                     $(`button.convert span.progress-indicator`).html(next_indicator);
                 }
@@ -537,17 +545,20 @@ class profile_migrator {
 
 	static function ajax_get_sites(){
 		$all_sites = get_sites();
-        $all_sites_id = [];
+		$all_sites_details = [];
 
         foreach ($all_sites as $site){
-			$all_sites_id[] = $site->blog_id;
+			$all_sites_details[] = array(
+			        'site_id' => $site->blog_id,
+                    'profile_count' => self::ajax_site_count_profiles($site->blog_id)
+            );
 		}
-		echo json_encode($all_sites_id);
+		echo json_encode($all_sites_details);
         wp_die();
 	}
 
-	static function ajax_site_count_profiles(){
-	    $site_id = $_POST['site_id'];
+	static function ajax_site_count_profiles($site_id){
+	    //$site_id = $_POST['site_id'];
 
 		switch_to_blog($site_id);
 
@@ -556,8 +567,8 @@ class profile_migrator {
 
 		restore_current_blog();
 
-		echo json_encode(max($old_posttype_count, $new_posttype_count));
-	    wp_die();
+		return (max($old_posttype_count, $new_posttype_count));
+	    //wp_die();
     }
 
 	/**

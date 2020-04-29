@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # coding: utf-8
+# completely deprecated - use wordpress plugin mode
 from typing import Dict
 
 import lxml.etree as etree
