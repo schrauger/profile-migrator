@@ -416,7 +416,7 @@ class profile_migrator {
 
                 function convert_sites(response){
                     $.each(response, function(index, site_details){
-                        console.log(site_details);
+                        //console.log(site_details);
                         let site_id = site_details['site_id'];
                         let profile_count = site_details['profile_count'];
 
