@@ -5,7 +5,7 @@ Plugin URI: https://github.com/schrauger/profile-migrator
 Description: One-shot plugin. Converts profiles from old UCF COM theme to the new Colleges-Theme style.
 If you run into timeout issues, increase the php-fpm and nginx timeouts. Also, you can limit the posts per page,
 then modify the offset and simply deactivate and reactivate the plugin to run the code for each set.
-Version: 1.4.1
+Version: 2.0.0
 Author: Stephen Schrauger
 Author URI: https://github.com/schrauger/profile-migrator
 License: GPL2
@@ -13,11 +13,27 @@ License: GPL2
 
 class profile_migrator {
 	const offset_multiplier = 0; /* increase this by 1 each time you activate the plugin.
-								    if the number to convert is set at 100, this will offset by 100, 200, 300, etc. keep in
-                                    keep increasing this until
+								    if the number to convert is set at 100, this will offset by 100, 200, 300, etc.
+                                    keep increasing this until all profiles are converted.
                                  */
-	const profiles_to_convert_at_once = 500; // if you get timeouts, reduce this number to ease the load.
+	const profiles_to_convert_at_once = 20; // if you get timeouts, reduce this number to ease the load.
 
+    static function add_actions(){
+	    register_activation_hook(__FILE__, ['profile_migrator','admin_notice_setup']); // run once, when plugin is activated.
+	    add_action( 'admin_notices', ['profile_migrator','admin_notice_profile_migrator'] ); // print out a notice on successful activation, telling the admin which range has been converted
+	    add_action( 'network_admin_notices', ['profile_migrator','admin_notice_profile_migrator'] ); // same notice, but for network-enabled plugin section
+	    //add_action('init',['profile_migrator','run_network_migration']); // this runs the entire script on every page load. testing only.
+
+	    add_action( 'network_admin_menu', ['profile_migrator','add_options_page'] ); // adds converter settings page
+	    add_action( 'wp_ajax_profile_migrator_get_sites', ['profile_migrator','ajax_get_sites'] ); // ajax to get a list of all sites
+	    add_action( 'wp_ajax_profile_migrator_site_count_profiles', ['profile_migrator','ajax_site_count_profiles'] ); // ajax to get a list of all sites
+	    add_action( 'wp_ajax_profile_migrator_site_quick_convert', ['profile_migrator','ajax_site_quick_convert'] ); // changes post type, taxonomy, and shortcode references
+	    add_action( 'wp_ajax_profile_migrator_site_ranged_convert', ['profile_migrator','ajax_site_ranged_convert'] ); // ajax to get a list of all sites
+
+
+    }
+
+    // @deprecated
 	static function run_network_migration(){
 		set_transient( 'admin-notice-profile-migrator', true, 600 );
 
@@ -30,19 +46,21 @@ class profile_migrator {
 		}
 	}
 
+	static function admin_notice_setup(){
+		set_transient( 'admin-notice-profile-migrator', true, 600 );
+	}
+
 	/**
 	 * Shows a message once, when the plugin is activated.
 	 */
 	static function admin_notice_profile_migrator(){
 		/* Check transient, if available display notice */
+
 		if( get_transient( 'admin-notice-profile-migrator' ) ){
-			$start = self::profiles_to_convert_at_once * self::offset_multiplier + 1; // people count starting with 1, not 0
-			$end = $start + self::profiles_to_convert_at_once - 1;
+
 			?>
 			<div class="updated notice is-dismissible">
-				<p>Conversion complete for profiles <strong><?=$start?> - <?=$end?></strong>.</p>
-				<p>Please edit the plugin code and increase the <code>offset_multiplier</code> by one, until all profiles have been converted.</p>
-				<p>Note: if you are getting nginx timeouts, reduce the <code>profiles_to_convert_at_once</code> setting.</p>
+                <p>Plugin activated. To run the conversion, go to the <a href="/wp-admin/network/settings.php?page=profile-migrator-options">plugin settings page.</a></p>
 			</div>
 			<?php
 			/* Delete transient, only display this notice once. */
@@ -51,17 +69,20 @@ class profile_migrator {
 	}
 
 	// Loops through all profile types
+    // @deprecated
 	static function convert(){
 
 		// only need to run the sql queries once. assume that multiplier>0 means we're running the script again for the next wave of profiles
-		/*if (self::offset_multiplier == 0) {
+		if (self::offset_multiplier == 0) {
 			self::alter_post_type();
 			self::alter_post_taxonomy();
 			self::alter_shortcode_references();
-		}*/
+		}
 		self::alter_acf_references();
 
 	}
+
+
 
 	/**
 	 * Alters the database to change post types from 'profiles' to 'person' for all existing 'profiles' posts
@@ -106,15 +127,21 @@ class profile_migrator {
 		}
 	}
 
-	static function alter_acf_references(){
-		$loop = new WP_Query(
-			array(
-				'post_type' => ['person','profiles'],
-				'posts_per_page' => self::profiles_to_convert_at_once,
-				'offset' => self::profiles_to_convert_at_once * self::offset_multiplier, // need to cycle between 0, 1000, 2000, and 3000.
-				//'s' => 'Deborah German'
-			)
-		);
+
+
+	static function alter_acf_references($range_start = null){
+		$wp_query_options = array(
+			'post_type' => ['person','profiles'],
+			'posts_per_page' => self::profiles_to_convert_at_once,
+            'post_status' => 'any',
+        );
+	    if ($range_start){
+	        $wp_query_options['offset'] = $range_start;
+        } else {
+		    $wp_query_options['offset'] = self::profiles_to_convert_at_once * self::offset_multiplier; // need to cycle between 0, 1000, 2000, and 3000.;
+        }
+
+		$loop = new WP_Query($wp_query_options);
 //		echo 'p: ' . $loop->post_count . '; ';
 		while ($loop->have_posts()) {
 			$loop->the_post();
@@ -331,11 +358,263 @@ class profile_migrator {
 		}
 	}
 
+	static function add_options_page(){
+		add_submenu_page(
+		        'settings.php',
+                'Profile Migrator',
+                'Profile Migrator',
+                'manage_options',
+                'profile-migrator-options',
+                array('profile_migrator','options_page_contents')
+        );
+	}
+	static function options_page_contents(){
+		?>
+        <h1>
+			Profile Migrator
+        </h1>
+        <p>Click run to begin migration. Depending on the number of profiles, this will take a long time.</p>
+        <button class="convert">Execute</button>
+        <div class="conversion-table">
+            <table>
+                <thead>
+                <tr>
+                    <th>Site ID</th>
+                    <!--<th>Initial conversion</th>-->
+                    <th>Count</th>
+                    <th>Progress</th>
+                </tr>
+                </thead>
+                <tbody>
+
+                </tbody>
+            </table>
+        </div>
+        <script type="text/javascript" >
+            jQuery(document).ready(function($) {
+
+                $('button.convert').click(convert_execute);
+
+                function convert_execute(){
+                    $('button.convert').prop('disabled', true);
+                    $('button.convert').html("<span class='text'>Processing</span> <span class='progress-indicator' style='display: inline-block; width: 1em;'></span>");
+
+                    // first, get multisites.
+                    // loop through each multisite, running the quick conversions, then ranged conversions for the profiles.
+
+                    // since 2.8 ajaxurl is always defined in the admin header and points to admin-ajax.php
+                    $.ajax({
+                        type: "POST",
+                        url: ajaxurl,
+                        data: {
+                            'action': 'profile_migrator_get_sites'
+                        },
+                        success: convert_sites,
+                        dataType: "json"
+                    });
+                }
+
+                function convert_sites(response){
+                    console.log(response);
+
+
+                    $.each(response, function(index, site_id){
+
+                        $('div.conversion-table tbody').append(`
+                        <tr class='site-${site_id}'>
+                            <td class='site-id'>${site_id}</td>
+                            <!--<td class='initial-conversion'></td>-->
+                            <td class='conversion-count'><span class='converted'></span>/<span class='total'></span></td>
+                            <td class='fully-converted'><span class='percent'></span></td>
+                        </tr>
+                        `);
+                        site_count_profiles(site_id);
+                        site_quick_convert(site_id);
+                        site_ranged_convert({
+                            site_id: site_id,
+                            range_start: 0,
+                            completed_range: 0,
+                            first_call: true
+                        });
+
+                    })
+                }
+
+                function site_count_profiles(site_id){
+                    $.ajax({
+                        type: "POST",
+                        url: ajaxurl,
+                        data: {
+                            'action': 'profile_migrator_site_count_profiles',
+                            'site_id': site_id
+                        },
+                        success: function(response){$(`tr.site-${site_id} td.conversion-count span.total`).html(response)},
+                        dataType: "json",
+                        async: false // I know this is deprecated. But I'm writing a one-off conversion, so I don't care.
+                    });
+                }
+
+                function site_quick_convert(site_id){
+                    $.ajax({
+                        type: "POST",
+                        url: ajaxurl,
+                        data: {
+                            'action': 'profile_migrator_site_quick_convert',
+                            'site_id': site_id
+                        },
+                        //success: function(response){$(`tr.site-${site_id} td.initial-conversion`).html(response)}, // no need to show this data. it doesn't take long, and it's only useful for debugging.
+                        dataType: "json"
+                    });
+                }
+
+                /**
+                 * Loop through all ranges for a site, until the server sets the 'complete' flag
+                 * @param options
+                 */
+                function site_ranged_convert(options){
+                    let site_row = `tr.site-${options['site_id']}`;
+                    let completed_count = options['completed_range'];
+                    if (options.complete){
+                        $(`${site_row} td.conversion-count span.converted`).html(completed_count);
+                        $(`${site_row} td.fully-converted`).html('Complete!');
+                        check_if_all_done();
+                    } else {
+                        $(`${site_row} td.conversion-count span.converted`).html(completed_count);
+                        if (!options.first_call){
+                            progress_indicator();
+                            let total = $(`${site_row} td.conversion-count span.total`).html();
+                            $(`${site_row} td.fully-converted span.percent`).html((parseInt(completed_count) / parseInt(total) * 100).toFixed(2) + '%');
+                        }
+                        $.ajax({
+                            type: "POST",
+                            url: ajaxurl,
+                            data: {
+                                'action': 'profile_migrator_site_ranged_convert',
+                                'site_id': options['site_id'],
+                                'range_start': options['range_start']
+                            },
+                            success: site_ranged_convert, //recursive call - server should respond with site id and next range for itself
+                            dataType: "json"
+                        })
+                    }
+                }
+                function progress_indicator(){
+                    let current_indicator = $(`button.convert span.progress-indicator`).html();
+                    let next_indicator;
+                    switch (current_indicator) {
+                        case "|":
+                            next_indicator = "/";
+                            break;
+                        case "/":
+                            next_indicator = "-";
+                            break;
+                        case "-":
+                            next_indicator = "\\";
+                            break;
+                        case "\\":
+                        default:
+                            next_indicator = "|";
+                    }
+                    $(`button.convert span.progress-indicator`).html(next_indicator);
+                }
+
+                function check_if_all_done(){
+                    let all_done = true;
+                    $('div.conversion-table td.fully-converted').each(function(){
+                        if ($(this).html() !== "Complete!"){
+                            all_done = false;
+                        }
+                    });
+                    if (all_done){
+                        $('button.convert').html('Conversion fully completed!');
+                    }
+                }
+            });
+        </script>
+		<?php
+    }
+
+
+	static function ajax_get_sites(){
+		$all_sites = get_sites();
+        $all_sites_id = [];
+
+        foreach ($all_sites as $site){
+			$all_sites_id[] = $site->blog_id;
+		}
+		echo json_encode($all_sites_id);
+        wp_die();
+	}
+
+	static function ajax_site_count_profiles(){
+	    $site_id = $_POST['site_id'];
+
+		switch_to_blog($site_id);
+
+		$old_posttype_count = array_sum((array) wp_count_posts('profiles'));
+		$new_posttype_count = array_sum((array) wp_count_posts('person'));
+
+		restore_current_blog();
+
+		echo json_encode(max($old_posttype_count, $new_posttype_count));
+	    wp_die();
+    }
+
+	/**
+	 * Runs sql queries for specific site. These are very fast, basically independent of the number of profiles on the site.
+	 */
+	static function ajax_site_quick_convert(){
+		$site_id = $_POST['site_id'];
+
+		switch_to_blog($site_id);
+		self::alter_post_type();
+		self::alter_post_taxonomy();
+		self::alter_shortcode_references();
+		restore_current_blog();
+
+		echo json_encode("Done");
+        wp_die();
+	}
+
+
+	static function ajax_site_ranged_convert(){
+		$site_id = $_POST['site_id'];
+        $range_start = $_POST['range_start'];
+
+		switch_to_blog($site_id);
+		self::alter_acf_references($range_start);
+		$existing_count = array_sum((array) wp_count_posts('person'));
+
+		restore_current_blog();
+
+		$completed_range = $range_start + self::profiles_to_convert_at_once;
+
+		$return_array = [];
+        if ($completed_range >= $existing_count){
+            // we are done converting for this site.
+            $return_array['completed_range'] = $existing_count;
+            $return_array['complete'] = true;
+            $return_array['site_id'] = $site_id;
+        } else {
+            // still have more profiles to complete. set up the next range start
+            $return_array['completed_range'] = $completed_range; // completed is 1-based.
+            $return_array['range_start'] = $completed_range; // start is 0-based, so no need to add one here. just use the previous completed range.
+	        $return_array['site_id'] = $site_id;
+        }
+
+		echo json_encode($return_array);
+		wp_die();
+	}
+
+	static function ranged_convert($site_id, $range_start){
+		switch_to_blog($site_id);
+		self::alter_acf_references($range_start);
+		restore_current_blog();
+	}
+
+
 
 }
 
-// run profile migration upon plugin activation
-register_activation_hook(__FILE__, ['profile_migrator','run_network_migration']); // run once, when plugin is activated.
-add_action( 'admin_notices', ['profile_migrator','admin_notice_profile_migrator'] );
-add_action( 'network_admin_notices', ['profile_migrator','admin_notice_profile_migrator'] );
-//add_action('init',['profile_migrator','run_network_migration']); // this runs the entire script on every page load. testing only.
+profile_migrator::add_actions();
+
