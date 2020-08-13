@@ -148,7 +148,7 @@ class profile_migrator {
 			//self::alter_acf_sub_reference('fax','person_phone_numbers','number', 2); // we don't care about fax numbers anymore. don't bring them over.
 			self::alter_acf_reference('email','person_email');
 			self::alter_acf_reference('office_address','person_room');
-			self::alter_acf_reference('education','person_educationspecialties');
+			self::alter_acf_reference_education_specialties('education','person_educationspecialties');
 			self::concatonate_old_acf_to_new_field(
 				[
 					[
