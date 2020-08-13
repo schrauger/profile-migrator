@@ -3,8 +3,6 @@
 Plugin Name: Profile Migrator
 Plugin URI: https://github.com/schrauger/profile-migrator
 Description: One-shot plugin. Converts profiles from old UCF COM theme to the new Colleges-Theme style.
-If you run into timeout issues, increase the php-fpm and nginx timeouts. Also, you can limit the posts per page,
-then modify the offset and simply deactivate and reactivate the plugin to run the code for each set.
 Version: 2.0.1
 Author: Stephen Schrauger
 Author URI: https://github.com/schrauger/profile-migrator
@@ -220,6 +218,70 @@ class profile_migrator {
 			}
 		}
 	}
+
+	static function alter_acf_reference_education_specialties(string $old_field, string $new_field){
+		if (class_exists('acf')) { // simple check to make sure acf is installed and running at this point
+
+			$new_value = get_field( $new_field );
+
+			if ( ! $new_value ) {
+				$old_value = get_field( $old_field );
+				if ($old_value) {
+					$html = new DOMDocument();
+					$html->loadHTML($old_value);
+					$h2_elements = $html->getElementsByTagName('h2');
+					foreach ($h2_elements as $h2_element) {
+					    //$new_h4_element =
+                            self::change_html_element_type($h2_element, 'h4', array('class' => 'heading-underline'));
+//						$h2_element->parentNode->replaceChild($new_h4_element, $h2_element);
+                    }
+				    // convert <h2> to
+
+					// if new field is empty, and old field has something, then copy old value to the new field
+					update_field( $new_field, $old_value );
+				}
+			} else {
+				// do nothing. don't overwrite if new field already has data (already migrated?),
+				// and don't bother setting an empty new field if there's no data in the old field.
+			}
+		}
+    }
+
+	/**
+     * Changes an html element to a new one - <h2> to <h4>, for example.
+     * Note: This alters the ownerDocument of the old node while also
+     * returning the new node element.
+	 * @param DOMElement $old_node
+	 * @param string     $new_name
+	 * @param array|null $override_attributes
+	 *
+	 * @return DOMElement
+	 */
+    static function change_html_element_type(DOMElement $old_node, string $new_name, array $override_attributes = null){
+	    $new_node = $old_node->ownerDocument->createElement($new_name);
+
+	    // copy any child elements, recursively
+	    foreach ($old_node->childNodes as $child){
+	        $child = $old_node->ownerDocument->importNode($child, true);
+	        $new_node->appendChild($child, true);
+        }
+
+	    // copy any element attributes
+	    foreach ($old_node->attributes as $attribute_name => $attribute_node){
+	        $new_node->setAttribute($attribute_name, $attribute_node);
+        }
+
+	    // allow new node to have alternate attributes, in case you want to change the class or other attributes
+	    foreach ($override_attributes as $attribute_name => $attribute_node){
+	        $new_node->setAttribute($attribute_name, $attribute_node);
+        }
+
+	    // alter the original document by replacing the old node with the new one
+	    $new_node->ownerDocument->replaceChild($new_node, $old_node);
+
+	    // return the new node in case the caller wants to continue using it
+	    return $new_node;
+    }
 
 	/**
 	 * @param string $old_field
