@@ -3,7 +3,7 @@
 Plugin Name: Profile Migrator
 Plugin URI: https://github.com/schrauger/profile-migrator
 Description: One-shot plugin. Converts profiles from old UCF COM theme to the new Colleges-Theme style.
-Version: 2.1.0
+Version: 2.2.0
 Author: Stephen Schrauger
 Author URI: https://github.com/schrauger/profile-migrator
 License: GPL2
@@ -14,7 +14,7 @@ class profile_migrator {
 								    if the number to convert is set at 100, this will offset by 100, 200, 300, etc.
                                     keep increasing this until all profiles are converted.
                                  */
-	const profiles_to_convert_at_once = 5; // if you get timeouts, reduce this number to ease the load.
+	const profiles_to_convert_at_once = 10; // if you get timeouts, reduce this number to ease the load.
 
     static function add_actions(){
 	    register_activation_hook(__FILE__, ['profile_migrator','admin_notice_setup']); // run once, when plugin is activated.
@@ -140,9 +140,9 @@ class profile_migrator {
         }
 
 		$loop = new WP_Query($wp_query_options);
-//		echo 'p: ' . $loop->post_count . '; ';
 		while ($loop->have_posts()) {
 			$loop->the_post();
+
 			self::alter_acf_reference('position','person_jobtitle');
 			self::alter_acf_sub_reference('phone','person_phone_numbers','number', 1);
 			//self::alter_acf_sub_reference('fax','person_phone_numbers','number', 2); // we don't care about fax numbers anymore. don't bring them over.
@@ -223,22 +223,18 @@ class profile_migrator {
 		if (class_exists('acf')) { // simple check to make sure acf is installed and running at this point
 
 			$new_value = get_field( $new_field );
-
 			if ( ! $new_value ) {
 				$old_value = get_field( $old_field );
 				if ($old_value) {
 					$html = new DOMDocument();
-					$html->loadHTML($old_value);
+					$html->loadHTML($old_value, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD); // create an html object, but don't add <html><body> or other <doctype> stuff; just the html as presented
 					$h2_elements = $html->getElementsByTagName('h2');
 					foreach ($h2_elements as $h2_element) {
-					    //$new_h4_element =
-                            self::change_html_element_type($h2_element, 'h4', array('class' => 'heading-underline'));
-//						$h2_element->parentNode->replaceChild($new_h4_element, $h2_element);
+                            $new_value = self::change_html_element_type($h2_element, 'h4', array('class' => 'heading-underline'));
                     }
-				    // convert <h2> to
 
 					// if new field is empty, and old field has something, then copy old value to the new field
-					update_field( $new_field, $old_value );
+					update_field( $new_field, $new_value );
 				}
 			} else {
 				// do nothing. don't overwrite if new field already has data (already migrated?),
@@ -255,7 +251,7 @@ class profile_migrator {
 	 * @param string     $new_name
 	 * @param array|null $override_attributes
 	 *
-	 * @return DOMElement
+	 * @return string HTML string
 	 */
     static function change_html_element_type(DOMElement $old_node, string $new_name, array $override_attributes = null){
 	    $new_node = $old_node->ownerDocument->createElement($new_name);
@@ -263,7 +259,7 @@ class profile_migrator {
 	    // copy any child elements, recursively
 	    foreach ($old_node->childNodes as $child){
 	        $child = $old_node->ownerDocument->importNode($child, true);
-	        $new_node->appendChild($child, true);
+	        $new_node->appendChild($child);
         }
 
 	    // copy any element attributes
@@ -277,10 +273,10 @@ class profile_migrator {
         }
 
 	    // alter the original document by replacing the old node with the new one
-	    $new_node->ownerDocument->replaceChild($new_node, $old_node);
+	    $old_node->parentNode->replaceChild($new_node, $old_node);
 
-	    // return the new node in case the caller wants to continue using it
-	    return $new_node;
+	    // return the new node so the html can be saved
+	    return $new_node->ownerDocument->saveHTML();
     }
 
 	/**
