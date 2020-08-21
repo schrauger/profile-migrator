@@ -3,7 +3,7 @@
 Plugin Name: Profile Migrator
 Plugin URI: https://github.com/schrauger/profile-migrator
 Description: One-shot plugin. Converts profiles from old UCF COM theme to the new Colleges-Theme style.
-Version: 2.0.1
+Version: 2.1.0
 Author: Stephen Schrauger
 Author URI: https://github.com/schrauger/profile-migrator
 License: GPL2
