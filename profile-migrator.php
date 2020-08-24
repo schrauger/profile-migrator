@@ -3,7 +3,7 @@
 Plugin Name: Profile Migrator
 Plugin URI: https://github.com/schrauger/profile-migrator
 Description: One-shot plugin. Converts profiles from old UCF COM theme to the new Colleges-Theme style.
-Version: 2.2.0
+Version: 2.3.0
 Author: Stephen Schrauger
 Author URI: https://github.com/schrauger/profile-migrator
 License: GPL2
@@ -14,7 +14,7 @@ class profile_migrator {
 								    if the number to convert is set at 100, this will offset by 100, 200, 300, etc.
                                     keep increasing this until all profiles are converted.
                                  */
-	const profiles_to_convert_at_once = 10; // if you get timeouts, reduce this number to ease the load.
+	const profiles_to_convert_at_once = 5; // if you get timeouts, reduce this number to ease the load.
 
     static function add_actions(){
 	    register_activation_hook(__FILE__, ['profile_migrator','admin_notice_setup']); // run once, when plugin is activated.
@@ -143,6 +143,9 @@ class profile_migrator {
 		while ($loop->have_posts()) {
 			$loop->the_post();
 
+			// the new person posttype uses ACF just like our old one.
+            // some fields are roughly the same and just need to be renamed.
+            // other fields need to be merged into a single new field.
 			self::alter_acf_reference('position','person_jobtitle');
 			self::alter_acf_sub_reference('phone','person_phone_numbers','number', 1);
 			//self::alter_acf_sub_reference('fax','person_phone_numbers','number', 2); // we don't care about fax numbers anymore. don't bring them over.
@@ -189,9 +192,13 @@ class profile_migrator {
 					]
 				], 'person_orderby_name'
 			);
-			self::biography_to_main();
-			self::resident_fields_to_main();
-			self::image_to_featured();
+
+			// set up the_content
+			self::biography_to_main(); // most contacts had a biography which will just be moved to the_content
+			self::affiliate_volunteer_fields_to_main(); // affiliates had a fiew small fields; concat them to the_content
+			self::resident_fields_to_main(); // residents had fun facts and other small fields like affiliates
+
+			self::image_to_featured(); // we used our own field for photos; now we'll use the featured_image field
 		}
 	}
 
@@ -219,6 +226,12 @@ class profile_migrator {
 		}
 	}
 
+	/**
+     * This changes <h2> elements from the 'education' acf field into <h4 class='whatever'> fields.
+     * It also updates the acf field name to the one used by the new system.
+	 * @param string $old_field
+	 * @param string $new_field
+	 */
 	static function alter_acf_reference_education_specialties(string $old_field, string $new_field){
 		if (class_exists('acf')) { // simple check to make sure acf is installed and running at this point
 
@@ -380,27 +393,89 @@ class profile_migrator {
 		}
 	}
 
+	// converts affiliate/volunteer fields to be the main post content
+	static function affiliate_volunteer_fields_to_main(){
+		global $post;
+
+		$specialty = get_field('avf_specialization_description_1');
+
+		$degree_type = get_field( 'avf_degree_1' );
+		$degree_description = get_field( 'avf_degree_description_1');
+
+		// got these constants from concat-card.php from our old theme
+		$appt_level_meanings['INST'] = "Instructor";
+		$appt_level_meanings['ASST'] = "Assistant Professor";
+		$appt_level_meanings['ASSC'] = "Associate Professor";
+		$appt_level_meanings['PROF'] = "Professor";
+		$appt_level = get_field('avf_appt_level_1');
+
+		if ($specialty || $degree_type || $degree_description || $appt_level) {
+
+			// use description from array, or just spit out the code if we don't know what it is
+			$appt_level_description = $appt_level_meanings[ $appt_level ] ? $appt_level_meanings[ $appt_level ] : $appt_level;
+
+			$new_content = "
+		    <div class='contact-info'>
+		        <div class='specialization'>
+		            <h4>Specialization</h4>
+		            <div class='details'>{$specialty}</div>
+		        </div>
+		        <div class='degree'>
+		            <h4>Degree</h4>
+		            <div class='details' data-degree='{$degree_type}'>{$degree_description}</div>
+		        </div>
+		        <div class='appt-level'>
+		            <h4>Appointment Level</h4>
+		            <div class='details' data-appt-level='{$appt_level}'>{$appt_level_description}</div>
+		        </div>
+		    </div>
+		";
+
+			if ( empty( $post->post_content ) ) {
+				wp_update_post(
+					[
+						'ID'           => $post->ID,
+						'post_content' => trim( $new_content )
+					]
+				);
+
+			} else {
+				// do nothing. don't overwrite if new field already has data (already migrated?),
+				// and don't bother setting an empty new field if there's no data in the old field.
+			}
+
+		} else {
+			// the fields are all empty. probably not an affiliate, or it was a very boring affiliate with no details.
+			// either way, leave the_content alone.
+		}
+	}
+
 	// converts resident fields to be the main post content
 	static function resident_fields_to_main(){
 		global $post;
 		$school = get_field( 'res_medical_school' );
-        $interests = get_field('res_career_interest');
-        $fun_fact = get_field('res_fun_fact');
+		$interests = get_field('res_career_interest');
+		$fun_fact = get_field('res_fun_fact');
 
-		if (empty($post->post_content)){
-			wp_update_post([
-				               'ID' => $post->ID,
-				               'post_content' => trim("
+		if ($school || $interests || $fun_fact) {
+			if ( empty( $post->post_content ) ) {
+				wp_update_post( [
+					                'ID'           => $post->ID,
+					                'post_content' => trim( "
 				               <div class='school'>{$school}</div>
 				               <div class='interests'>{$interests}</div>
 				               <div class='fun_fact'>{$fun_fact}</div>
-				               ")
-			               ]);
+				               " )
+				                ] );
 
+			} else {
+				// do nothing. don't overwrite if new field already has data (already migrated?),
+				// and don't bother setting an empty new field if there's no data in the old field.
+			}
 		} else {
-			// do nothing. don't overwrite if new field already has data (already migrated?),
-			// and don't bother setting an empty new field if there's no data in the old field.
-		}
+		    // the fields are all empty. probably not a resident, or it was a very boring resident with no fun facts.
+            // either way, leave the_content alone.
+        }
 	}
 
 
