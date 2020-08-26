@@ -3,7 +3,7 @@
 Plugin Name: Profile Migrator
 Plugin URI: https://github.com/schrauger/profile-migrator
 Description: One-shot plugin. Converts profiles from old UCF COM theme to the new Colleges-Theme style.
-Version: 2.3.0
+Version: 2.3.1
 Author: Stephen Schrauger
 Author URI: https://github.com/schrauger/profile-migrator
 License: GPL2
@@ -240,14 +240,18 @@ class profile_migrator {
 				$old_value = get_field( $old_field );
 				if ($old_value) {
 					$html = new DOMDocument();
-					$html->loadHTML($old_value, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD); // create an html object, but don't add <html><body> or other <doctype> stuff; just the html as presented
-					$h2_elements = $html->getElementsByTagName('h2');
-					foreach ($h2_elements as $h2_element) {
-                            $new_value = self::change_html_element_type($h2_element, 'h4', array('class' => 'heading-underline'));
+					$html->loadHTML($old_value, LIBXML_HTML_NODEFDTD);  // create an html object, but don't add <doctype> stuff; just the html as presented.
+                                                                                                        // note: this WILL get <html><body> tags added. however, those are absolutely necessary, or else the replacement library runs into errors and truncates the output.
+                                                                                                        // so, since the <html><body> is a static length, we keep them in during processing, then just manually snip them out of the html string.
+					while ($html->getElementsByTagName('h2')->length){
+					    $h2_element = $html->getElementsByTagName('h2')->item(0);
+						self::change_html_element_type($h2_element, 'h4', array('class' => 'heading-underline'));
                     }
 
-					// if new field is empty, and old field has something, then copy old value to the new field
-					update_field( $new_field, $new_value );
+					$trim_off_front = strpos($html->saveHTML(),'<body>') + 6;
+					$trim_off_end = (strrpos($html->saveHTML(),'</body>')) - strlen($html->saveHTML());
+					$new_value = substr($html->saveHTML(), $trim_off_front, $trim_off_end);
+					update_field( $new_field, $new_value  );
 				}
 			} else {
 				// do nothing. don't overwrite if new field already has data (already migrated?),
@@ -289,7 +293,7 @@ class profile_migrator {
 	    $old_node->parentNode->replaceChild($new_node, $old_node);
 
 	    // return the new node so the html can be saved
-	    return $new_node->ownerDocument->saveHTML();
+	    //return $new_node->ownerDocument->saveHTML($new_node);
     }
 
 	/**
@@ -303,30 +307,34 @@ class profile_migrator {
 			global $post;
 
 			$repeater_values = get_field($new_field_parent);
-			$first_row = $repeater_values[$index - 1]; // acf indexes are 1 based, but php arrays are 0 based.
-			$new_value = $first_row[$new_field];
+			if (is_array($repeater_values)) {
+				$first_row = $repeater_values[ $index - 1 ]; // acf indexes are 1 based, but php arrays are 0 based.
+				$new_value = $first_row[ $new_field ];
 
-			if ( ! $new_value ) {
-				$old_value = get_field( $old_field );
-				if ($old_value) {
-					// if new field is empty, and old field has something, then copy old value to the new field
-					$current_rows = count(get_field($new_field_parent));
-					if ($index > $current_rows) {
-						// apparently, it doesn't auto insert a new row. do it manually.
-						$sanity = 0;
-						while (($index > count(get_field($new_field_parent))) && ($index < 10) && $sanity < 10){
-							// sanity check of 10; increase if you know there can be more than 10 rows of some data
-							add_row($new_field_parent, [$new_field => null]); //insert empty data, which will be overwritten later
-							$sanity++;
+				if ( ! $new_value ) {
+					$old_value = get_field( $old_field );
+					if ( $old_value ) {
+						// if new field is empty, and old field has something, then copy old value to the new field
+						$current_rows = count( $repeater_values );
+						if ( $index > $current_rows ) {
+							// apparently, it doesn't auto insert a new row. do it manually.
+							$sanity = 0;
+							while ( ( $index > count( $repeater_values ) ) && ( $index < 10 ) && $sanity < 10 ) {
+								// sanity check of 10; increase if you know there can be more than 10 rows of some data
+								add_row( $new_field_parent, [ $new_field => null ] ); //insert empty data, which will be overwritten later
+								$sanity ++;
+							}
 						}
+						update_sub_field( [ $new_field_parent, $index, $new_field ], $old_value );
+						//echo 'new data: ' . get_sub_field([$new_field_parent, $index, $new_field]);
 					}
-					update_sub_field( [ $new_field_parent, $index, $new_field ], $old_value );
-					//echo 'new data: ' . get_sub_field([$new_field_parent, $index, $new_field]);
+				} else {
+					// do nothing. don't overwrite if new field already has data (already migrated?),
+					// and don't bother setting an empty new field if there's no data in the old field.
 				}
 			} else {
-				// do nothing. don't overwrite if new field already has data (already migrated?),
-				// and don't bother setting an empty new field if there's no data in the old field.
-			}
+			    // parent div passed to this method is not actually a repeater field. do nothing.
+            }
 		}
 	}
 
