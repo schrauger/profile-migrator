@@ -3,7 +3,7 @@
 Plugin Name: Profile Migrator
 Plugin URI: https://github.com/schrauger/profile-migrator
 Description: One-shot plugin. Converts profiles from old UCF COM theme to the new Colleges-Theme style.
-Version: 2.3.1
+Version: 2.4.0
 Author: Stephen Schrauger
 Author URI: https://github.com/schrauger/profile-migrator
 License: GPL2
@@ -251,6 +251,11 @@ class profile_migrator {
 					$trim_off_front = strpos($html->saveHTML(),'<body>') + 6;
 					$trim_off_end = (strrpos($html->saveHTML(),'</body>')) - strlen($html->saveHTML());
 					$new_value = substr($html->saveHTML(), $trim_off_front, $trim_off_end);
+
+					// remove semicolons from Specialties: or Research Interests:
+					$new_value = self::remove_char_from_string_if_found_after_needle($new_value, "Specialties", ":");
+					$new_value = self::remove_char_from_string_if_found_after_needle($new_value, "Research Interests", ":");
+
 					update_field( $new_field, $new_value  );
 				}
 			} else {
@@ -258,6 +263,35 @@ class profile_migrator {
 				// and don't bother setting an empty new field if there's no data in the old field.
 			}
 		}
+    }
+
+
+
+	/**
+     * Removes a character (or string) from a haystack string if the character immediately follows after a specified keyword or phrase.
+	 * Only removes a single instance of the offending character. Call within a while loop if you want to remove all instances.
+     * Example: ("Hello to the~ World! ~~~ This is me.", "the", "~") would return "Hello to the World! ~~~ This is me." (removes the tilde after "the")
+	 * Example: ("Hello to the~~ World! ~~~ This is me.", "the", "~") would return "Hello to the~ World! ~~~ This is me." (only removes the first instance of a tilde after "the")
+	 * @param $haystack
+	 * @param $needle_without_character
+	 * @param $offending_post_needle
+	 *
+	 * @return mixed
+	 */
+    static function remove_char_from_string_if_found_after_needle($haystack, $needle_without_character, $offending_post_needle){
+        $offending_character_position = stripos($haystack, $needle_without_character . $offending_post_needle);
+        if ($offending_character_position === false){
+            // the needle+character was not found. change nothing.
+            return $haystack;
+        }
+        $offset_start = $offending_character_position + strlen($needle_without_character); // don't remove the needle, just the character(s) after it
+        $offset_end = $offset_start + strlen($offending_post_needle); // offending string might be more than a single character
+
+        // build up the string parts without the offending string
+        $left_string = substr($haystack, 0, $offset_start); // haystack up until the offending string
+        $right_string = substr($haystack, $offset_end); // haystack starting after the offending string
+
+        return $left_string . $right_string;
     }
 
 	/**
